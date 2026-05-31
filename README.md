@@ -76,3 +76,10 @@ Updates:
 
 1.4.2b
 - added turtle (renderer note: turtle is aliased to `t`)
+
+# 1.5.0
+
+- HUGE update
+- added BTDPE
+- and...
+- ## **ADDED 3D!**
