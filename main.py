@@ -15,6 +15,8 @@ from enum import Enum
 from time import sleep
 from math import floor as mfloor
 import turtle as t
+import BTDPE
+import threading
 
 ### GLOBALS ###
 
@@ -294,14 +296,62 @@ def stepAll():
 
 # Main loop
 def main():
-	global TICK
-	while True:
-		sleep(1 / FPS)
-		stepAll()
-		for obj in work.getAllObjects().values():
-			print(obj.Position)
-		TICK += 1
-
+    global TICK
+    BTDPE_Rendering_Thread = threading.Thread(
+        target=BTDPE.register_turtle,
+        args=( t, ),
+        daemon=True
+    )
+    BTDPE.meshes = { }
+    BTDPE.registered_meshes = { }
+    BTDPE.create_mesh(
+        "cube",
+        floor.uuid,
+        {"x": floor.Position[0], "y": floor.Position[1], "z": floor.Position[2]},
+        {"x": floor.Size[0], "y": floor.Size[1], "z": floor.Size[2]},
+        {"x": 0, "y": 0, "z": 0},
+        False,
+        [],
+        "",
+        False,
+        False,
+        [],
+        {"r": 0, "g": 0, "b": 0},
+        {"canTransparent": False, "visible": True, "opacity": 1},
+        []
+    )
+    BTDPE.CamY = 5
+    BTDPE.CamZ = 3
+    BTDPE.CamX = 0
+    BTDPE_Rendering_Thread.start()
+    while True:
+        sleep(1 / FPS)
+        stepAll()
+        for obj in work.getAllObjects().values():
+            print(obj.Position)
+            objBTDPE = next((item for item in BTDPE.meshes.values() if item is not None and isinstance(item, dict) and item.get('name') == obj.uuid), None)
+            if objBTDPE is None:
+                BTDPE.create_mesh(
+                    "cube",
+                    obj.uuid,
+                    {"x": obj.Position[0], "y": obj.Position[1], "z": obj.Position[2]},
+                    {"x": obj.Size[0], "y": obj.Size[1], "z": obj.Size[2]},
+                    {"x": 0, "y": 0, "z": 0},
+                    False,
+                    [],
+                    "",
+                    False,
+                    False,
+                    [],
+                    {"r": 0, "g": 0, "b": 0},
+                    {"canTransparent": False, "visible": True, "opacity": 1},
+                    []
+                )
+            else:
+                objBTDPE["mesh_position"]["x"] = obj.Position[0]
+                objBTDPE["mesh_position"]["y"] = obj.Position[1]
+                objBTDPE["mesh_position"]["z"] = obj.Position[2]
+        TICK += 1
 
 # Start program
 
