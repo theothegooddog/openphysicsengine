@@ -83,3 +83,17 @@ Updates:
 - added BTDPE
 - and...
 - ## **ADDED 3D!**
+
+# 1.6.0
+
+- it has an actual GUI now!!
+- `main.py` renders the world in a turtle window (floor, objects, players, live HUD)
+- camera projects the 3D scene to 2D; chase-cam follows your player in multiplayer
+- added `launcher.py` — a little window to pick Single Player / Multiplayer / Host Server and launch
+- `python main.py --no-gui` keeps the old console loop
+
+How to run:
+- `python launcher.py` — start from the GUI launcher
+- `python main.py` — single-player showcase window
+- `python main.py --server 127.0.0.1:5555 --name you` — join a server
+- `python server.py` — host a multiplayer server
