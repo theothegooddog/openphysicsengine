@@ -77,14 +77,7 @@ Updates:
 1.4.2b
 - added turtle (renderer note: turtle is aliased to `t`)
 
-# 1.5.0
-
-- HUGE update
-- added BTDPE
-- and...
-- ## **ADDED 3D!**
-
-# 1.6.0
+# 1.5.0b
 
 - it has an actual GUI now!!
 - `main.py` renders the world in a turtle window (floor, objects, players, live HUD)
@@ -97,3 +90,5 @@ How to run:
 - `python main.py` — single-player showcase window
 - `python main.py --server 127.0.0.1:5555 --name you` — join a server
 - `python server.py` — host a multiplayer server
+
+####sorry banana i just cant really use btdpe and im going through alot of iterations
