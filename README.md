@@ -15,7 +15,7 @@ Identifiers:
 
 ---
 
-Version: 1.4.2
+Version: 1.5.2b
 <br>
 Current features:
 - Collisions
