@@ -1,4 +1,4 @@
-l# OpenPhysicsEngine
+# OpenPhysicsEngine
 ### An open source physics engine.
 
 ---
