@@ -3,7 +3,7 @@
 
 from physics import Workspace, Object, Property
 
-o = Object().create("point")
+o = Object.create("point")
 w = Workspace()
 
 print("Creating objects:")
