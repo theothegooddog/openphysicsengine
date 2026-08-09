@@ -91,8 +91,11 @@ How to run:
 - `python main.py --server 127.0.0.1:5555 --name you` — join a server
 - `python server.py` — host a multiplayer server
 
-###### sorry banana i just cant really use btdpe and im going through alot of iterations
-
 1.5.1b
 
 - updated the api for scenes
+
+# 1.5.2b
+
+- WE ADDED CODING!
+- also made a seperate api change so you can publish game files and run them (check game.osc)
