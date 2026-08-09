@@ -11,23 +11,28 @@ Repo: https://github.com/theothegooddog/openphysicsengine
 """
 
 ### LIBRARIES ###
+import ast
+
 from enum import Enum
 from time import sleep
-from math import floor as mfloor
+from math import floor, sqrt as mfloor, sqrt
+from sys import version
 
 ### GLOBALS ###
 
 FPS = 30
 TICK = 0
-LIBRARY_MODE = bool(__name__ != "__main__")
+LIBRARY_MODE = __name__!="__main__"
+CONSOLE = f"Running OPENPHYSICSENGINE on python {version}"
 
 ### HELPERS ###
-
 
 class MathEnum():
 	Huge = 10**1000
 	Min = 1 / (10**20)
 
+class InvalidPropertyError:
+		pass
 
 class Property(Enum):
 	Gravity = "Gravity"
@@ -39,6 +44,10 @@ class Property(Enum):
 	AirResistance = "Air Resistance"
 	Anchored = "Anchored"
 	Size = "Size"
+	Name = "Name"
+	Type = "Type"
+	Source = "Source"
+	Permission = "Permission"
 
 	@staticmethod
 	def from_string(name: str):
@@ -47,7 +56,7 @@ class Property(Enum):
 		try:
 			return Property(name)
 		except ValueError:
-			raise ValueError(f"Unknown property: {name}")
+			raise InvalidPropertyError(f"Unknown property: {name}")
 
 
 def prop(name: str) -> Property:
@@ -71,6 +80,20 @@ class ObjectType(Enum):
 def objt(name: str) -> ObjectType:
 	return ObjectType.from_string(name)
 
+class Any:
+	pass
+
+Something = Any
+
+class Vector3:
+	def __init__(self,x:int=0,y:int=0,z:int=0):
+		self.x=x
+		self.y=y
+		self.z=z
+		self.Magnitude = math.sqrt((x**2)+(y**2)+(z**2))
+		self.Normal = (x+y+z)/x if(x>y)and(x>z)else(x+y+z)/y if(y>x)and(y>z)else(x+y+z)/z
+		
+### Objects ###
 
 class Workspace:
 
@@ -122,8 +145,10 @@ class Workspace:
 		if property == Property.Gravity: return True, self.Gravity
 		elif property == Property.AirResistance: return True, self.AirResistance
 		else: return (False, None)
+
+WORKSPACE = Workspace()
 		
-class BaseObject:
+class BaseObject: # baseobject = any part / physical object
 	def __init__(self):
 		self.Mass = 0
 		self.Position = [0, 0, 0]
@@ -137,6 +162,8 @@ class BaseObject:
 		self.uuid = None
 		self.Type = "baseObject"
 		self._listeners = {}
+		self.config={"objProperties":[Property.Mass,Property.Position,Property.Velocity,Property.Name,Property.Size,Property.Restitution,Property.Friction,Property.Anchored,Property.Type]}
+		 
 	def step(self):
 		if self.Anchored: return (None)
 		gx, gy, gz = self.workspace.GravityDirection
@@ -186,37 +213,7 @@ class BaseObject:
 		self.Velocity[1] *= 1 + (f / 100)
 		
 	def setProperty(self, property: Property, value):
-		success = False
-	
-		if property == Property.Position and isinstance(value, tuple):
-			self.Position = list(value)
-			success = True
-	
-		elif property == Property.Velocity and isinstance(value, tuple):
-			self.Velocity = list(value)
-			success = True
-
-		elif property == Property.Mass and isinstance(value, int):
-			self.Mass = value
-			success = True
-
-		elif property == Property.Restitution and isinstance(value, float):
-			self.Restitution = value
-			success = True
-
-		elif property == Property.Friction and isinstance(value, int):
-			self.Friction = value
-			success = True
-
-		elif property == Property.Anchored and isinstance(value, bool):
-			self.Anchored = value
-			success = True
-
-		elif property == Property.Size and isinstance(value, tuple):
-			self.Size = value
-			success = True
-
-		if success:
+		if property in self.config["objProperties"]:
 			if hasattr(self, "_listeners") and property in self._listeners:
 				for callback in self._listeners[property]:
 					callback(value)
@@ -226,16 +223,28 @@ class BaseObject:
 		return False, None
 
 	def getProperty(self, property: Property):
-		if property == Property.Position: return True, self.Position
-		elif property == Property.Velocity: return True, self.Velocity
-		elif property == Property.Mass: return True, self.Mass
-		elif property == Property.Restitution: return True, self.Restitution
-		elif property == Property.Friction: return True, self.Friction
-		elif property == Property.Anchored: return True, self.Anchored
-		elif property == Property.Size: return True, self.Size
+		if property in self.config["objProperties"]: return (True, eval("self."+str(property)))
 		else: return (False, None)
 
 	def propertyChanged(self, property: Property, callback):
+		if property not in self.config["objProperties"]: raise InvalidPropertyError(f"'{property}' is an invalid property.")
+		if property not in self._listeners:
+			self._listeners[property] = []
+		self._listeners[property].append(callback)
+
+class Instance: # instance = bare minimum
+	def __init__(self):
+		self.uuid = None
+		self.workspace = None
+		self.Type = "instance"
+		self.Name = "Instance"
+		self._listeners = {}
+		self.config={"objProperties":[Property.Type,Property.Name]}
+	def step(self): pass
+	def setProperty(self,prop,val): pass
+	def getProperty(self,prop,val): return(False,None)
+	def propertyChanged(self, property: Property, callback):
+		if property not in self.config["objProperties"]: raise InvalidPropertyError(f"'{property}' is an invalid property.")
 		if property not in self._listeners:
 			self._listeners[property] = []
 		self._listeners[property].append(callback)
@@ -254,6 +263,7 @@ class Point(BaseObject):
 		self.uuid = None
 		self.Type = "Point"
 		self._listeners = {}
+		self.config={"objProperties":[Property.Mass,Property.Position,Property.Velocity,Property.Name,Property.Size,Property.Restitution,Property.Friction,Property.Anchored,Property.Type]}
 
 class Floor(BaseObject):
 	def __init__(self):
@@ -269,10 +279,47 @@ class Floor(BaseObject):
 		self.uuid = None
 		self.Type = None
 		self._listeners = {}
+		self.config={"objProperties":[Property.Mass,Property.Position,Property.Velocity,Property.Name,Property.Size,Property.Restitution,Property.Friction,Property.Anchored,Property.Type]}
 		def reset():
 			self.Anchored = True
 		self.propertyChanged(Property.Anchored, reset)
-				
+
+class Code(Instance):
+	def is_safe(code_str):
+		try:
+			tree = ast.parse(code_str)
+		except SyntaxError:
+			return False
+		for node in ast.walk(tree):
+			if isinstance(node, (ast.Import, ast.ImportFrom)):
+				return False
+			if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+				if node.func.id in ['eval', 'exec', 'open', 'compile', '__import__']:
+					return False
+		return True
+	def __init__(self):
+		self.ran = False
+		self.Source = ""
+		self.uuid = None
+		self.workspace = None
+		self.Type = "Code"
+		self.Name = "Code"
+		self._listeners = {}
+		self.config = {"objProperties":[Property.Source,Property.Type,Property.Name]}
+	def step(self):
+		if self.ran: return
+		exec(self.Source, {'__builtins__': {"workspace":WORKSPACE,"game":{"Workspace":WORKSPACE},"Object":Object,"Property":Property,"Vector3":Vector3}})
+	def run(self):
+		self.step()
+	def setCode(self,code:str):
+		if self.is_safe(code):
+			self.Source = code
+			return True
+		return False
+	def rerun():
+		self.ran = False
+		self.step()
+
 class Object:
 	def create(type: ObjectType):
 		type = str(type)
@@ -281,28 +328,17 @@ class Object:
 				return Point()
 			case "Floor":
 				return Floor()
+			case "Code":
+				return Code()
 
 ### MAIN ###
 
-# Example
-work = Workspace()
-floor = Object.create("Floor")
-point = Object.create("Point")
-point.setProperty(Property.Restitution, 0.7)
-point.setProperty(Property.Position, (-50, 50, 0))
-point.setProperty(Property.Velocity, (2, 0, 0))
-point.setProperty(Property.Friction, 2)
-floor.setProperty(Property.Position, (0, -20, 0))
-work.addObject(point)
-work.addObject(floor)
-work.setProperty(Property.AirResistance, 1)
-
+exec(open("game.osc","r").read(), {'__builtins__': {"workspace":WORKSPACE,"game":{"Workspace":WORKSPACE},"Object":Object,"Property":Property,"Vector3":Vector3}})
 
 # Functions / Helpers
 def stepAll():
-	for obj in work.getAllObjects().values():
+	for obj in WORKSPACE.getAllObjects().values():
 		obj.step()
-
 
 # Main loop
 def main():
@@ -310,7 +346,7 @@ def main():
 	while True:
 		sleep(1 / FPS)
 		stepAll()
-		for obj in work.getAllObjects().values():
+		for obj in WORKSPACE.getAllObjects().values():
 			print(obj.Position)
 		TICK += 1
 
