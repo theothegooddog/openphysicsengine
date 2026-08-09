@@ -1,0 +1,12 @@
+# Default Game for OpenPhysicsEngine (9/8/26)
+
+floor = Object.create("Floor")
+point = Object.create("Point")
+point.setProperty(Property.Restitution, 0.7)
+point.setProperty(Property.Position, (-50, 50, 0))
+point.setProperty(Property.Velocity, (2, 0, 0))
+point.setProperty(Property.Friction, 2)
+floor.setProperty(Property.Position, (0, -20, 0))
+workspace.addObject(point)
+workspace.addObject(floor)
+workspace.setProperty(Property.AirResistance, 1)
