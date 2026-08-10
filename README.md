@@ -98,4 +98,12 @@ How to run:
 # 1.5.2b
 
 - WE ADDED CODING!
-- also made a seperate api change so you can publish game files and run them (check game.osc)
+- also made a seperate api change so you can publish game files and run them (check game)
+
+1.5.3b
+
+- added threading for `code` objects so `while True:` doesnt freeze the game
+- changed game extension to py for code syntax highlighting
+- added console
+- added full sandboxing and alot of libraries
+- added checking for viruses
