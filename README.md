@@ -106,4 +106,4 @@ How to run:
 - changed game extension to py for code syntax highlighting
 - added console
 - added full sandboxing and alot of libraries
-- added checking for viruses
+- added checking for viruses (check virus.py)
