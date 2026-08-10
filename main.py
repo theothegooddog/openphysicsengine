@@ -12,6 +12,10 @@ Repo: https://github.com/theothegooddog/openphysicsengine
 
 ### LIBRARIES ###
 import ast
+import time
+import math
+import random
+import threading
 
 from enum import Enum
 from time import sleep
@@ -23,7 +27,7 @@ from sys import version
 FPS = 30
 TICK = 0
 LIBRARY_MODE = __name__!="__main__"
-CONSOLE = f"Running OPENPHYSICSENGINE on python {version}"
+CONSOLE = f"Running OPENPHYSICSENGINE on python {version}\n"
 
 ### HELPERS ###
 
@@ -31,7 +35,7 @@ class MathEnum():
 	Huge = 10**1000
 	Min = 1 / (10**20)
 
-class InvalidPropertyError:
+class UnsafeSceneError(BaseException):
 		pass
 
 class Property(Enum):
@@ -92,6 +96,46 @@ class Vector3:
 		self.z=z
 		self.Magnitude = math.sqrt((x**2)+(y**2)+(z**2))
 		self.Normal = (x+y+z)/x if(x>y)and(x>z)else(x+y+z)/y if(y>x)and(y>z)else(x+y+z)/z
+
+def is_safe(code_str):
+		try:
+			tree = ast.parse(code_str)
+		except SyntaxError:
+			return False
+		for node in ast.walk(tree):
+			if isinstance(node, (ast.Import, ast.ImportFrom)):
+				return False
+			if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+				if node.func.id in ['eval', 'exec', 'open', 'compile', '__import__']:
+					return False
+		return True
+
+def run_safe(code_str):
+	try:
+		tree = ast.parse(code_str)
+	except SyntaxError:
+		return False
+	for node in ast.walk(tree):
+		if isinstance(node, (ast.Import, ast.ImportFrom)):
+			return False
+		if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+			if node.func.id in ['eval', 'exec', 'open', 'compile', '__import__']:
+				return "Unsafe"
+	# Create a base globals dictionary with your custom objects
+	sandbox_globals = {
+    "workspace": WORKSPACE,
+    "game": {"Workspace": WORKSPACE},
+    "Object": Object,
+    "Property": Property,
+    "Vector3": Vector3,
+    "random": random,
+    "time": time,
+    "math": math,
+    "console": Console
+	}
+	# Run exec. Python automatically includes standard __builtins__ this way.
+	exec(code_str, sandbox_globals)
+
 		
 ### Objects ###
 
@@ -308,7 +352,7 @@ class Code(Instance):
 		self.config = {"objProperties":[Property.Source,Property.Type,Property.Name]}
 	def step(self):
 		if self.ran: return
-		exec(self.Source, {'__builtins__': {"workspace":WORKSPACE,"game":{"Workspace":WORKSPACE},"Object":Object,"Property":Property,"Vector3":Vector3}})
+		threading.Thread(run_safe,(self.Source)).start()
 	def run(self):
 		self.step()
 	def setCode(self,code:str):
@@ -331,9 +375,20 @@ class Object:
 			case "Code":
 				return Code()
 
+class Console:
+	def log(string):
+		CONSOLE += "l"+string + "/n"
+	def error(string):
+		CONSOLE += "e"+string + "/n"
+	def warn(string):
+		CONSOLE += "w"+string + "/n"
+	def run(string):
+		CONSOLE += run_safe(string) + "/n"
+
 ### MAIN ###
 
-exec(open("game.osc","r").read(), {'__builtins__': {"workspace":WORKSPACE,"game":{"Workspace":WORKSPACE},"Object":Object,"Property":Property,"Vector3":Vector3}})
+if not is_safe(open("game.py","r").read()): raise UnsafeSceneError("Scene named '"+open("game.py","r").readlines()[0][2:].replace("\n", "")+"' is unsafe.")
+run_safe(open("game.py","r").read())
 
 # Functions / Helpers
 def stepAll():
@@ -349,7 +404,6 @@ def main():
 		for obj in WORKSPACE.getAllObjects().values():
 			print(obj.Position)
 		TICK += 1
-
 
 # Start program
 
