@@ -384,7 +384,7 @@ class Console:
 		CONSOLE += "w"+string + "/n"
 	def run(string):
 		CONSOLE += run_safe(string) + "/n"
-	def get()->string:
+	def get()->str:
 		return CONSOLE
 
 ### MAIN ###
