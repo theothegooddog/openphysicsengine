@@ -77,19 +77,19 @@ Updates:
 1.4.2b
 - added turtle (renderer note: turtle is aliased to `t`)
 
-# 1.5.0b
+# ~~1.5.0b~~ [removed]
 
-- it has an actual GUI now!!
-- `main.py` renders the world in a turtle window (floor, objects, players, live HUD)
-- camera projects the 3D scene to 2D; chase-cam follows your player in multiplayer
-- added `launcher.py` — a little window to pick Single Player / Multiplayer / Host Server and launch
-- `python main.py --no-gui` keeps the old console loop
+- ~~it has an actual GUI now!!~~
+-~~`main.py` renders the world in a turtle window (floor, objects, players, live HUD)~~
+- ~~camera projects the 3D scene to 2D; chase-cam follows your player in multiplayer~~
+- ~~added `launcher.py` — a little window to pick Single Player / Multiplayer / Host Server and launch~~
+- ~~`python main.py --no-gui` keeps the old console loop~~
 
-How to run:
-- `python launcher.py` — start from the GUI launcher
-- `python main.py` — single-player showcase window
-- `python main.py --server 127.0.0.1:5555 --name you` — join a server
-- `python server.py` — host a multiplayer server
+~~How to run:~~
+- ~~`python launcher.py` — start from the GUI launcher~~
+- ~~`python main.py` — single-player showcase window~~
+- ~~`python main.py --server 127.0.0.1:5555 --name you` — join a server~~
+- ~~`python server.py` — host a multiplayer server~~
 
 1.5.1b
 
@@ -98,7 +98,7 @@ How to run:
 # 1.5.2b
 
 - WE ADDED CODING!
-- also made a seperate api change so you can publish game files and run them (check game)
+- also made a seperate api change so you can publish game files and run them (check game.~~osc~~py)
 
 1.5.3b
 
