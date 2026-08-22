@@ -26,9 +26,19 @@ Current features:
 - Time (ticks & seconds)
 - Gravity
 - Gravity **_direction_**
+- Air resistance
+- Coding
+- Storage
+- Assets
+- Scene safety
 <br>
-Requirements: `pip install math time turtle enum`
+Requirements: `pip install math time enum threading random ast`
 <br>
+Upcoming features:
+- Meshes
+- Online services
+- Sound
+- Flexible parents
 Updates:
 
 1.2.5a
@@ -107,3 +117,9 @@ Updates:
 - added console
 - added full sandboxing and alot of libraries
 - added checking for viruses (check virus.py)
+
+# 1.5.4b
+
+- added documentation, assetservice, and serverstorage
+- added cloning _(idk why i didnt add that earlier)_
+- baseobject inherits instance
