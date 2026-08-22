@@ -70,6 +70,7 @@ def prop(name: str) -> Property:
 class ObjectType(Enum):
 	Point = "point"
 	Floor = "floor"
+	Code = "code"
 
 	@staticmethod
 	def from_string(name: str):
@@ -124,14 +125,15 @@ def run_safe(code_str):
 	# Create a base globals dictionary with your custom objects
 	sandbox_globals = {
     "workspace": WORKSPACE,
-    "game": {"Workspace": WORKSPACE},
+    "game": {"Workspace": WORKSPACE, "AssetService": AssetService},
     "Object": Object,
     "Property": Property,
     "Vector3": Vector3,
     "random": random,
     "time": time,
     "math": math,
-    "console": Console
+    "console": Console,
+    "Documentation": Documentation
 	}
 	# Run exec. Python automatically includes standard __builtins__ this way.
 	exec(code_str, sandbox_globals)
@@ -189,10 +191,19 @@ class Workspace:
 		if property == Property.Gravity: return True, self.Gravity
 		elif property == Property.AirResistance: return True, self.AirResistance
 		else: return (False, None)
+	
+	def removeObject(self, obj):
+		self.Objects[obj.uuid]
+	
+	def findObject(self, name):
+		for obj in self.Objects:
+			if obj.Name == name:
+				return obj
+		return None
 
 WORKSPACE = Workspace()
 		
-class BaseObject: # baseobject = any part / physical object
+class BaseObject(Instance): # baseobject = any part / physical object
 	def __init__(self):
 		self.Mass = 0
 		self.Position = [0, 0, 0]
@@ -275,6 +286,10 @@ class BaseObject: # baseobject = any part / physical object
 		if property not in self._listeners:
 			self._listeners[property] = []
 		self._listeners[property].append(callback)
+	
+	def destroy(self):
+		WORKSPACE.removeObject(self)
+		self = None
 
 class Instance: # instance = bare minimum
 	def __init__(self):
@@ -292,6 +307,11 @@ class Instance: # instance = bare minimum
 		if property not in self._listeners:
 			self._listeners[property] = []
 		self._listeners[property].append(callback)
+	def clone(self):
+		obj = Object.create(self.Type)
+		for p in self.config["objProperties"]:
+			obj.setProperty(p,self.getProperty(p))
+		return obj
 
 class Point(BaseObject):
 	def __init__(self):
@@ -377,20 +397,61 @@ class Object:
 
 class Console:
 	def log(string):
-		CONSOLE += "l"+string + "/n"
+		string = str(string)
+		global CONSOLE
+		CONSOLE += "l;"+string + "/n"
+		print("[CONSOLE]", string)
 	def error(string):
-		CONSOLE += "e"+string + "/n"
+		string = str(string)
+		global CONSOLE
+		CONSOLE += "e;"+string + "/n"
+		print("[CONSOLE] [ERROR]", string)
+	def fatal(string):
+		string = str(string)
+		global CONSOLE
+		CONSOLE += "f;"+string + "/n"
+		print("[CONSOLE] [FATAL]", string)
+		exit()
 	def warn(string):
-		CONSOLE += "w"+string + "/n"
+		string = str(string)
+		global CONSOLE
+		CONSOLE += "w;"+string + "/n"
+		print("[CONSOLE] [WARN]", string)
 	def run(string):
+		string = str(string)
+		global CONSOLE
 		CONSOLE += run_safe(string) + "/n"
 	def get()->str:
+		global CONSOLE
 		return CONSOLE
 
-### MAIN ###
+class AssetService:
+	def load(path,type="r"):
+		try:
+			open(path,type)
+		except FileNotFoundError:
+			return "File not found."
+		except ValueError:
+			return "Invalid type."
+		if not path.startswith("assets/"): Console.error("[ASSETSERVICE] Path must be in the assets folder.")
+		return open(path,type)
+	def read(path): return load(path,"r").read()
+	def write(path,text): return load(path,"w").write(text)
+	def append(path,text): return load(path,"w").write(text)
 
-if not is_safe(open("game.py","r").read()): raise UnsafeSceneError("Scene named '"+open("game.py","r").readlines()[0][2:].replace("\n", "")+"' is unsafe.")
-run_safe(open("game.py","r").read())
+def Documentation(obj):
+	match type(obj):
+		case "Workspace": return "Place to put all objects in the scene."
+		case "Object": return "Main object."
+		case "Property": return "Property enum."
+		case "Vector3": return "3D Vector."
+		case "Console": return "A console to log information."
+		case "AssetService": return "A service to store/read assets."
+		case "Documentation": return "A function to get information about services."
+		case "ServerStorage": return "A place to store objects while not applying physics or showing to players."
+		case _: return _
+
+### MAIN ###
 
 # Functions / Helpers
 def stepAll():
@@ -399,12 +460,15 @@ def stepAll():
 
 # Main loop
 def main():
+	if not is_safe(open("game/game.py","r").read()):
+		Console.fatal("Scene named '"+(open("game/game.py","r").readlines()[0][2:].replace("\n", "") if open("game/game.py","r").readlines()[0][:2]=="# " else "[NO NAME]")+"' is unsafe.")
+		return 1
+	run_safe(open("game/game.py","r").read())
 	global TICK
 	while True:
 		sleep(1 / FPS)
 		stepAll()
-		for obj in WORKSPACE.getAllObjects().values():
-			print(obj.Position)
+		# any frame code
 		TICK += 1
 
 # Start program
