@@ -15,7 +15,7 @@ Identifiers:
 
 ---
 
-Version: 1.5.2b
+Version: 1.5.4b
 <br>
 Current features:
 - Collisions
@@ -35,10 +35,12 @@ Current features:
 Requirements: `pip install math time enum threading random ast`
 <br>
 Upcoming features:
+
 - Meshes
 - Online services
 - Sound
 - Flexible parents
+<br>
 Updates:
 
 1.2.5a
