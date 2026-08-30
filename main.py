@@ -38,6 +38,9 @@ class MathEnum():
 class UnsafeSceneError(BaseException):
 		pass
 
+class InvalidPropertyError(Exception):
+	pass
+
 class Property(Enum):
 	Gravity = "Gravity"
 	Mass = "Mass"
@@ -48,6 +51,9 @@ class Property(Enum):
 	AirResistance = "Air Resistance"
 	Anchored = "Anchored"
 	Size = "Size"
+	Rotation = "Rotation"
+	AngularVelocity = "Angular Velocity"
+	CanCollide = "Can Collide"
 	Name = "Name"
 	Type = "Type"
 	Source = "Source"
@@ -148,6 +154,72 @@ class Face(Enum):
 	Front = "Front"
 	Back = "Back"
 
+### ROTATION / COLLISION MATH ###
+
+def rotationMatrix(rotation):
+	# rotation is [x, y, z] in degrees, applied as Rz @ Ry @ Rx
+	rx, ry, rz = (math.radians(a) for a in rotation)
+	cx, sx = math.cos(rx), math.sin(rx)
+	cy, sy = math.cos(ry), math.sin(ry)
+	cz, sz = math.cos(rz), math.sin(rz)
+	return [
+		[cy * cz, cz * sx * sy - cx * sz, cx * cz * sy + sx * sz],
+		[cy * sz, cx * cz + sx * sy * sz, cx * sy * sz - cz * sx],
+		[-sy,     cy * sx,                cx * cy],
+	]
+
+def rotatedHalfSize(size, rotation):
+	# world-axis-aligned half extents of a box after rotating it
+	m = rotationMatrix(rotation)
+	hx, hy, hz = size[0] / 2, size[1] / 2, size[2] / 2
+	return [
+		abs(m[0][0]) * hx + abs(m[0][1]) * hy + abs(m[0][2]) * hz,
+		abs(m[1][0]) * hx + abs(m[1][1]) * hy + abs(m[1][2]) * hz,
+		abs(m[2][0]) * hx + abs(m[2][1]) * hy + abs(m[2][2]) * hz,
+	]
+
+def getInverseMass(obj):
+	if obj.Anchored: return 0
+	if obj.Mass > 0: return 1 / obj.Mass
+	return 1
+
+def resolveCollision(a, b):
+	# collision between the rotated bounding boxes of two parts
+	a_half = rotatedHalfSize(a.Size, a.Rotation)
+	b_half = rotatedHalfSize(b.Size, b.Rotation)
+
+	overlap = [0, 0, 0]
+	for axis in range(3):
+		overlap[axis] = (a_half[axis] + b_half[axis]) - abs(a.Position[axis] - b.Position[axis])
+		if overlap[axis] <= 0: return False # not touching
+
+	inv_a = getInverseMass(a)
+	inv_b = getInverseMass(b)
+	total = inv_a + inv_b
+	if total == 0: return True # both anchored, nothing to move
+
+	# push apart along the axis with the least overlap, heavier part moves less
+	axis = overlap.index(min(overlap))
+	direction = 1 if a.Position[axis] >= b.Position[axis] else -1
+	a.Position[axis] += direction * overlap[axis] * (inv_a / total)
+	b.Position[axis] -= direction * overlap[axis] * (inv_b / total)
+
+	# bounce if they are moving into each other
+	relative = a.Velocity[axis] - b.Velocity[axis]
+	if relative * direction < 0:
+		restitution = min(a.Restitution, b.Restitution)
+		impulse = -(1 + restitution) * relative / total
+		a.Velocity[axis] += impulse * inv_a
+		b.Velocity[axis] -= impulse * inv_b
+
+		# friction slows sliding along the other two axes
+		friction = 1 - (max(a.Friction, b.Friction) / 100)
+		for other in range(3):
+			if other == axis: continue
+			a.Velocity[other] *= friction
+			b.Velocity[other] *= friction
+	return True
+
 ### General Object Classes ###
 
 class Instance: # instance = bare minimum
@@ -160,8 +232,16 @@ class Instance: # instance = bare minimum
 		self.config={"objProperties":[Property.Type,Property.Name,Property.Parent]}
 		self.Children = []
 	def step(self): pass
-	def setProperty(self,prop,val): pass
-	def getProperty(self,prop,val): return(False,None)
+	def setProperty(self,prop,val):
+		if prop not in self.config["objProperties"]: return (False, None)
+		if isinstance(val, (tuple, list)): val = list(val) # copy so parts don't share position/rotation lists
+		setattr(self, prop.name, val)
+		for callback in self._listeners.get(prop, []):
+			callback()
+		return (True, val)
+	def getProperty(self,prop,val=None):
+		if prop not in self.config["objProperties"]: return (False, None)
+		return (True, getattr(self, prop.name))
 	def propertyChanged(self, property: Property, callback):
 		if property not in self.config["objProperties"]: raise InvalidPropertyError(f"'{property}' is an invalid property.")
 		if property not in self._listeners:
@@ -176,7 +256,8 @@ class Instance: # instance = bare minimum
 	def clone(self):
 		obj = Object.create(self.Type)
 		for p in self.config["objProperties"]:
-			obj.setProperty(p,self.getProperty(p))
+			ok, val = self.getProperty(p)
+			if ok: obj.setProperty(p, val)
 		return obj
 	def destroy(self):
 		WORKSPACE.removeObject(self)
@@ -189,6 +270,9 @@ class BaseObject(Instance): # baseobject = any part / physical object
 		self.Velocity = [0, 0, 0]
 		self.Name = "baseObject"
 		self.Size = [0,0,0]
+		self.Rotation = [0, 0, 0]
+		self.AngularVelocity = [0, 0, 0]
+		self.CanCollide = True
 		self.Restitution = 0
 		self.Friction = 0
 		self.Anchored = False
@@ -197,7 +281,7 @@ class BaseObject(Instance): # baseobject = any part / physical object
 		self.uuid = None
 		self.Type = "baseObject"
 		self._listeners = {}
-		self.config={"objProperties":[Property.Mass,Property.Position,Property.Velocity,Property.Name,Property.Size,Property.Restitution,Property.Friction,Property.Anchored,Property.Type,Property.Parent]}
+		self.config={"objProperties":[Property.Mass,Property.Position,Property.Velocity,Property.Name,Property.Size,Property.Rotation,Property.AngularVelocity,Property.CanCollide,Property.Restitution,Property.Friction,Property.Anchored,Property.Type,Property.Parent]}
 		 
 	def step(self):
 		if self.Anchored: return (None)
@@ -216,36 +300,52 @@ class BaseObject(Instance): # baseobject = any part / physical object
 		self.Position[1] += self.Velocity[1]
 		self.Position[2] += self.Velocity[2]
 
-		if self.Type == "Point":
+		# Spin: angular velocity is degrees per tick
+		self.Rotation[0] = (self.Rotation[0] + self.AngularVelocity[0]) % 360
+		self.Rotation[1] = (self.Rotation[1] + self.AngularVelocity[1]) % 360
+		self.Rotation[2] = (self.Rotation[2] + self.AngularVelocity[2]) % 360
+
+		if self.CanCollide:
 			floor = WORKSPACE.getFloor()
 			if floor:
+				half = rotatedHalfSize(self.Size, self.Rotation)
+				floor_half = rotatedHalfSize(floor.Size, floor.Rotation)
+
 				# Floor bounds
-				floor_min_x = floor.Position[0] - floor.Size[0] / 2
-				floor_max_x = floor.Position[0] + floor.Size[0] / 2
-				floor_min_z = floor.Position[2] - floor.Size[2] / 2
-				floor_max_z = floor.Position[2] + floor.Size[2] / 2
-				floor_top_y = floor.Position[1]
-	
-				# Point bottom
-				point_bottom = self.Position[1] - self.Size[1] / 2
-	
+				floor_min_x = floor.Position[0] - floor_half[0]
+				floor_max_x = floor.Position[0] + floor_half[0]
+				floor_min_z = floor.Position[2] - floor_half[2]
+				floor_max_z = floor.Position[2] + floor_half[2]
+				floor_top_y = floor.Position[1] + floor_half[1]
+
+				# Part bottom (uses the rotated bounding box)
+				part_bottom = self.Position[1] - half[1]
+
 				# Check if inside X/Z bounds
 				inside_x = floor_min_x <= self.Position[0] <= floor_max_x
 				inside_z = floor_min_z <= self.Position[2] <= floor_max_z
-	
+
 				# Check collision with floor
-				if inside_x and inside_z and point_bottom <= floor_top_y:
+				if inside_x and inside_z and part_bottom <= floor_top_y and self.Velocity[1] <= 0:
 					# Snap to surface
-					self.Position[1] = floor_top_y + self.Size[1] / 2
-	
+					self.Position[1] = floor_top_y + half[1]
+
 					# Bounce
 					self.Velocity[1] *= -self.Restitution
-	
-					# Optional friction (this part was odd before)
+
+					# Friction slows sliding and spinning
 					friction = 1 - (f / 100)
 					self.Velocity[0] *= friction
 					self.Velocity[2] *= friction
-		self.Velocity[1] *= 1 + (f / 100)
+					self.AngularVelocity[0] *= friction
+					self.AngularVelocity[1] *= friction
+					self.AngularVelocity[2] *= friction
+
+		# Air resistance dampens all movement
+		drag = 1 - r
+		self.Velocity[0] *= drag
+		self.Velocity[1] *= drag
+		self.Velocity[2] *= drag
 
 ### Objects ###
 
@@ -323,6 +423,9 @@ class Point(BaseObject):
 		self.Velocity = [0, 0, 0]
 		self.Name = "Point"
 		self.Size = [2, 1, 4]
+		self.Rotation = [0, 0, 0]
+		self.AngularVelocity = [0, 0, 0]
+		self.CanCollide = True
 		self.Restitution = 0.7
 		self.Friction = 2
 		self.Anchored = False
@@ -330,7 +433,7 @@ class Point(BaseObject):
 		self.uuid = None
 		self.Type = "Point"
 		self._listeners = {}
-		self.config={"objProperties":[Property.Mass,Property.Position,Property.Velocity,Property.Name,Property.Size,Property.Restitution,Property.Friction,Property.Anchored,Property.Type]}
+		self.config={"objProperties":[Property.Mass,Property.Position,Property.Velocity,Property.Name,Property.Size,Property.Rotation,Property.AngularVelocity,Property.CanCollide,Property.Restitution,Property.Friction,Property.Anchored,Property.Type]}
 
 class Floor(BaseObject):
 	def __init__(self):
@@ -339,14 +442,17 @@ class Floor(BaseObject):
 		self.Velocity = [0, 0, 0]
 		self.Name = "Floor"
 		self.Size = [2047, 0, 2047]
+		self.Rotation = [0, 0, 0]
+		self.AngularVelocity = [0, 0, 0]
+		self.CanCollide = True
 		self.Restitution = 0.7
 		self.Friction = 2
 		self.Anchored = True
 		self.Parent = None
 		self.uuid = None
-		self.Type = None
+		self.Type = "Floor"
 		self._listeners = {}
-		self.config={"objProperties":[Property.Mass,Property.Position,Property.Velocity,Property.Name,Property.Size,Property.Restitution,Property.Friction,Property.Anchored,Property.Type]}
+		self.config={"objProperties":[Property.Mass,Property.Position,Property.Velocity,Property.Name,Property.Size,Property.Rotation,Property.AngularVelocity,Property.CanCollide,Property.Restitution,Property.Friction,Property.Anchored,Property.Type]}
 		def reset():
 			self.Anchored = True
 		self.propertyChanged(Property.Anchored, reset)
@@ -468,8 +574,16 @@ def Documentation(obj):
 
 # Functions / Helpers
 def stepAll():
-	for obj in WORKSPACE.getAllObjects().values():
+	objects = list(WORKSPACE.getAllObjects().values())
+	for obj in objects:
 		obj.step()
+	# part-to-part collisions (the floor's top surface is handled in BaseObject.step)
+	parts = [o for o in objects if isinstance(o, BaseObject) and o.CanCollide]
+	floor = WORKSPACE.getFloor()
+	if floor and floor.CanCollide: parts.append(floor)
+	for i in range(len(parts)):
+		for j in range(i + 1, len(parts)):
+			resolveCollision(parts[i], parts[j])
 
 # Main loop
 def main():

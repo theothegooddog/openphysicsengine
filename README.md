@@ -15,10 +15,11 @@ Identifiers:
 
 ---
 
-Version: 1.5.4b
+Version: 1.6.0b
 <br>
 Current features:
-- Collisions
+- Collisions (floor **_and_** part-to-part)
+- Rotation (parts & floors, with spin via angular velocity)
 - Objects (adding & getting)
 - Floors
 - Position
@@ -125,3 +126,15 @@ Updates:
 - added documentation, assetservice, and serverstorage
 - added cloning _(idk why i didnt add that earlier)_
 - baseobject inherits instance
+
+# 1.6.0b
+
+- big update!
+- added rotation to baseparts and floors (`Property.Rotation`, degrees)
+- added spinning with `Property.AngularVelocity` (degrees per tick, friction slows it on the floor)
+- added part-to-part collisions! parts push apart, bounce, and stack — heavier parts push lighter ones (anchored parts never move)
+- collisions now use the rotated bounding box, so a tilted part rests higher and floors can be rotated too
+- added `Property.CanCollide` to turn collisions off per part
+- setProperty/getProperty actually work now (so does clone and propertyChanged listeners)
+- fixed floors never registering with the workspace (`Floor.Type` was `None`) so floor collisions actually happen
+- fixed the old friction line that made parts speed up forever; air resistance actually does something now
