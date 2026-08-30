@@ -138,3 +138,7 @@ Updates:
 - setProperty/getProperty actually work now (so does clone and propertyChanged listeners)
 - fixed floors never registering with the workspace (`Floor.Type` was `None`) so floor collisions actually happen
 - fixed the old friction line that made parts speed up forever; air resistance actually does something now
+- added flexible parents
+- added decals
+- +more!
+- ###### also i wanted to say 55 cause 1.5.5 but its 1.6.0 :(
