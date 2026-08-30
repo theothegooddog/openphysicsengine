@@ -52,6 +52,7 @@ class Property(Enum):
 	Type = "Type"
 	Source = "Source"
 	Permission = "Permission"
+	Parent = "Parent"
 
 	@staticmethod
 	def from_string(name: str):
@@ -71,6 +72,7 @@ class ObjectType(Enum):
 	Point = "point"
 	Floor = "floor"
 	Code = "code"
+	Decal = "decal"
 
 	@staticmethod
 	def from_string(name: str):
@@ -138,11 +140,122 @@ def run_safe(code_str):
 	# Run exec. Python automatically includes standard __builtins__ this way.
 	exec(code_str, sandbox_globals)
 
+class Face(Enum):
+	Top = "Top"
+	Bottom = "Bottom"
+	Left = "Left"
+	Right = "Right"
+	Front = "Front"
+	Back = "Back"
+
+### General Object Classes ###
+
+class Instance: # instance = bare minimum
+	def __init__(self):
+		self.uuid = None
+		self.Parent = None
+		self.Type = "instance"
+		self.Name = "Instance"
+		self._listeners = {}
+		self.config={"objProperties":[Property.Type,Property.Name,Property.Parent]}
+		self.Children = []
+	def step(self): pass
+	def setProperty(self,prop,val): pass
+	def getProperty(self,prop,val): return(False,None)
+	def propertyChanged(self, property: Property, callback):
+		if property not in self.config["objProperties"]: raise InvalidPropertyError(f"'{property}' is an invalid property.")
+		if property not in self._listeners:
+			self._listeners[property] = []
+		self._listeners[property].append(callback)
+	def addChild(self,obj):
+		self.Children.append(obj)
+	def removeChild(self,obj):
+		if obj in self.Children:
+			for i, obja in enumerate(self.Children):
+				if obja is obj: del self.Children[i] # new tech :O
+	def clone(self):
+		obj = Object.create(self.Type)
+		for p in self.config["objProperties"]:
+			obj.setProperty(p,self.getProperty(p))
+		return obj
+	def destroy(self):
+		WORKSPACE.removeObject(self)
+		self = None
 		
+class BaseObject(Instance): # baseobject = any part / physical object
+	def __init__(self):
+		self.Mass = 0
+		self.Position = [0, 0, 0]
+		self.Velocity = [0, 0, 0]
+		self.Name = "baseObject"
+		self.Size = [0,0,0]
+		self.Restitution = 0
+		self.Friction = 0
+		self.Anchored = False
+		self.Parent = None
+		self.Children = []
+		self.uuid = None
+		self.Type = "baseObject"
+		self._listeners = {}
+		self.config={"objProperties":[Property.Mass,Property.Position,Property.Velocity,Property.Name,Property.Size,Property.Restitution,Property.Friction,Property.Anchored,Property.Type,Property.Parent]}
+		 
+	def step(self):
+		if self.Anchored: return (None)
+		gx, gy, gz = WORKSPACE.GravityDirection
+		g = WORKSPACE.Gravity
+		f = self.Friction
+		r = WORKSPACE.AirResistance
+
+		ax, ay, az = gx * g, gy * g, gz * g
+
+		self.Velocity[0] += ax
+		self.Velocity[1] += ay
+		self.Velocity[2] += az
+
+		self.Position[0] += self.Velocity[0]
+		self.Position[1] += self.Velocity[1]
+		self.Position[2] += self.Velocity[2]
+
+		if self.Type == "Point":
+			floor = WORKSPACE.getFloor()
+			if floor:
+				# Floor bounds
+				floor_min_x = floor.Position[0] - floor.Size[0] / 2
+				floor_max_x = floor.Position[0] + floor.Size[0] / 2
+				floor_min_z = floor.Position[2] - floor.Size[2] / 2
+				floor_max_z = floor.Position[2] + floor.Size[2] / 2
+				floor_top_y = floor.Position[1]
+	
+				# Point bottom
+				point_bottom = self.Position[1] - self.Size[1] / 2
+	
+				# Check if inside X/Z bounds
+				inside_x = floor_min_x <= self.Position[0] <= floor_max_x
+				inside_z = floor_min_z <= self.Position[2] <= floor_max_z
+	
+				# Check collision with floor
+				if inside_x and inside_z and point_bottom <= floor_top_y:
+					# Snap to surface
+					self.Position[1] = floor_top_y + self.Size[1] / 2
+	
+					# Bounce
+					self.Velocity[1] *= -self.Restitution
+	
+					# Optional friction (this part was odd before)
+					friction = 1 - (f / 100)
+					self.Velocity[0] *= friction
+					self.Velocity[2] *= friction
+		self.Velocity[1] *= 1 + (f / 100)
+
 ### Objects ###
 
-class Workspace:
+class Game(Instance):
+	def __init__(self):
+		self.Workspace = WORKSPACE
+		self.AssetService = AssetService
+		self.Parent = None
 
+class Workspace:
 	def __init__(self):
 		self.Gravity = 0.5
 		self.Objects = {}
@@ -156,7 +269,7 @@ class Workspace:
 			uuid = len(self.Objects) + 1
 			self.Objects[uuid] = obj
 			obj.uuid = uuid
-			obj.workspace = self
+			obj.Parent = self
 			return uuid
 
 	def addObjects(self, *objs):
@@ -202,116 +315,6 @@ class Workspace:
 		return None
 
 WORKSPACE = Workspace()
-		
-class BaseObject(Instance): # baseobject = any part / physical object
-	def __init__(self):
-		self.Mass = 0
-		self.Position = [0, 0, 0]
-		self.Velocity = [0, 0, 0]
-		self.Name = "baseObject"
-		self.Size = [0,0,0]
-		self.Restitution = 0
-		self.Friction = 0
-		self.Anchored = False
-		self.workspace = None
-		self.uuid = None
-		self.Type = "baseObject"
-		self._listeners = {}
-		self.config={"objProperties":[Property.Mass,Property.Position,Property.Velocity,Property.Name,Property.Size,Property.Restitution,Property.Friction,Property.Anchored,Property.Type]}
-		 
-	def step(self):
-		if self.Anchored: return (None)
-		gx, gy, gz = self.workspace.GravityDirection
-		g = self.workspace.Gravity
-		f = self.Friction
-		r = self.workspace.AirResistance
-
-		ax, ay, az = gx * g, gy * g, gz * g
-
-		self.Velocity[0] += ax
-		self.Velocity[1] += ay
-		self.Velocity[2] += az
-
-		self.Position[0] += self.Velocity[0]
-		self.Position[1] += self.Velocity[1]
-		self.Position[2] += self.Velocity[2]
-
-		if self.Type == "Point":
-			floor = self.workspace.getFloor()
-			if floor:
-				# Floor bounds
-				floor_min_x = floor.Position[0] - floor.Size[0] / 2
-				floor_max_x = floor.Position[0] + floor.Size[0] / 2
-				floor_min_z = floor.Position[2] - floor.Size[2] / 2
-				floor_max_z = floor.Position[2] + floor.Size[2] / 2
-				floor_top_y = floor.Position[1]
-	
-				# Point bottom
-				point_bottom = self.Position[1] - self.Size[1] / 2
-	
-				# Check if inside X/Z bounds
-				inside_x = floor_min_x <= self.Position[0] <= floor_max_x
-				inside_z = floor_min_z <= self.Position[2] <= floor_max_z
-	
-				# Check collision with floor
-				if inside_x and inside_z and point_bottom <= floor_top_y:
-					# Snap to surface
-					self.Position[1] = floor_top_y + self.Size[1] / 2
-	
-					# Bounce
-					self.Velocity[1] *= -self.Restitution
-	
-					# Optional friction (this part was odd before)
-					friction = 1 - (f / 100)
-					self.Velocity[0] *= friction
-					self.Velocity[2] *= friction
-		self.Velocity[1] *= 1 + (f / 100)
-		
-	def setProperty(self, property: Property, value):
-		if property in self.config["objProperties"]:
-			if hasattr(self, "_listeners") and property in self._listeners:
-				for callback in self._listeners[property]:
-					callback(value)
-
-			return True, f"Set {property} to {value}"
-
-		return False, None
-
-	def getProperty(self, property: Property):
-		if property in self.config["objProperties"]: return (True, eval("self."+str(property)))
-		else: return (False, None)
-
-	def propertyChanged(self, property: Property, callback):
-		if property not in self.config["objProperties"]: raise InvalidPropertyError(f"'{property}' is an invalid property.")
-		if property not in self._listeners:
-			self._listeners[property] = []
-		self._listeners[property].append(callback)
-	
-	def destroy(self):
-		WORKSPACE.removeObject(self)
-		self = None
-
-class Instance: # instance = bare minimum
-	def __init__(self):
-		self.uuid = None
-		self.workspace = None
-		self.Type = "instance"
-		self.Name = "Instance"
-		self._listeners = {}
-		self.config={"objProperties":[Property.Type,Property.Name]}
-	def step(self): pass
-	def setProperty(self,prop,val): pass
-	def getProperty(self,prop,val): return(False,None)
-	def propertyChanged(self, property: Property, callback):
-		if property not in self.config["objProperties"]: raise InvalidPropertyError(f"'{property}' is an invalid property.")
-		if property not in self._listeners:
-			self._listeners[property] = []
-		self._listeners[property].append(callback)
-	def clone(self):
-		obj = Object.create(self.Type)
-		for p in self.config["objProperties"]:
-			obj.setProperty(p,self.getProperty(p))
-		return obj
 
 class Point(BaseObject):
 	def __init__(self):
@@ -323,7 +326,7 @@ class Point(BaseObject):
 		self.Restitution = 0.7
 		self.Friction = 2
 		self.Anchored = False
-		self.workspace = None
+		self.Parent = None
 		self.uuid = None
 		self.Type = "Point"
 		self._listeners = {}
@@ -339,7 +342,7 @@ class Floor(BaseObject):
 		self.Restitution = 0.7
 		self.Friction = 2
 		self.Anchored = True
-		self.workspace = None
+		self.Parent = None
 		self.uuid = None
 		self.Type = None
 		self._listeners = {}
@@ -365,7 +368,7 @@ class Code(Instance):
 		self.ran = False
 		self.Source = ""
 		self.uuid = None
-		self.workspace = None
+		self.Parent = None
 		self.Type = "Code"
 		self.Name = "Code"
 		self._listeners = {}
@@ -383,6 +386,16 @@ class Code(Instance):
 	def rerun():
 		self.ran = False
 		self.step()
+
+class Decal(Instance):
+	def __init__(self):
+		self.uuid = None
+		self.Children = []
+		self.Type = "Decal"
+		self.Name = "Decal"
+		self.Parent = None
+		self.Face = Face.Top
+		self.Texture = 0
 
 class Object:
 	def create(type: ObjectType):
@@ -448,7 +461,7 @@ def Documentation(obj):
 		case "Console": return "A console to log information."
 		case "AssetService": return "A service to store/read assets."
 		case "Documentation": return "A function to get information about services."
-		case "ServerStorage": return "A place to store objects while not applying physics or showing to players."
+		case "ServerStorage": return "A function to get information about services."
 		case _: return _
 
 ### MAIN ###
