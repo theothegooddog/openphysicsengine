@@ -32,6 +32,9 @@ Current features:
 - Storage
 - Assets
 - Scene safety
+- Decals (images)
+- Hierarchy
+
 <br>
 Requirements: `pip install math time enum threading random ast`
 <br>
@@ -40,7 +43,6 @@ Upcoming features:
 - Meshes
 - Online services
 - Sound
-- Flexible parents
 <br>
 Updates:
 
