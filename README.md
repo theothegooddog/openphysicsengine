@@ -15,6 +15,23 @@ Identifiers:
 
 ---
 
+### eulib — the UI library
+
+eulib is OpenPhysicsEngine's UI library, built on tkinter: easy widget classes, dropdowns, and real 3D views. `finalui` is the `tk.Tk()` of eulib:
+
+```python
+from eulib import finalui
+
+window = finalui.run(title="My App")
+window.button("Click me", on_click=lambda: window.toast("hi!"))
+view = window.view3d()
+view.spin(view.add_cube(), y=1)   # no mainloop() needed!
+```
+
+Try the demo with `python -m eulib` — full docs in [eulib/README.md](eulib/README.md).
+
+---
+
 Version: 1.6.0b
 <br>
 Current features:
