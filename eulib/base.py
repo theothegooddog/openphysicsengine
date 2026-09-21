@@ -1,6 +1,25 @@
 """Shared bits every eulib widget gets."""
 
+import tkinter as tk
+
 from .theme import get_theme
+
+
+def raise_widget(widget):
+    """Raise a widget in the stacking order. (Canvas.lift() is taken —
+    tkinter aliases it to tag_raise, which works on canvas items — so we
+    always go through Misc.lift.)"""
+    tk.Misc.lift(widget)
+
+
+def raise_tree(widget):
+    """Raise a widget AND everything laid out inside it, keeping layers in
+    order. Needed because a widget moved into a sibling container (pack/place
+    with in_=...) only shows if it sits above that container in the stacking
+    order."""
+    raise_widget(widget)
+    for child in widget.pack_slaves() + widget.place_slaves():
+        raise_tree(child)
 
 # keyword args that control layout instead of the widget itself
 PACK_KEYS = ("side", "fill", "expand", "anchor", "pad", "padx", "pady")
@@ -26,16 +45,31 @@ def font(size=11, bold=False):
 class EasyWidget:
     """Mixin: every eulib widget can hide/show/enable/disable itself."""
 
-    _pack_opts = None
+    _geo = None                # ("pack" | "place", options) — how it was laid out
+    _layout_defaults = {}      # how this kind of widget likes to be packed
 
     def hide(self):
-        """Take the widget off the screen (it remembers its spot settings)."""
-        self.pack_forget()
+        """Take the widget off the screen (it remembers its spot)."""
+        manager = self.winfo_manager()
+        if manager == "place":
+            self.place_forget()
+        elif manager == "grid":
+            self.grid_forget()
+        else:
+            self.pack_forget()
         return self
 
     def show(self):
-        """Put a hidden widget back."""
-        self.pack(**(self._pack_opts or {}))
+        """Put a hidden widget back where it was."""
+        if self._geo:
+            kind, opts = self._geo
+            if kind == "place":
+                self.place(**opts)
+            else:
+                self.pack(**opts)
+            raise_tree(self)
+        else:
+            self.pack()
         return self
 
     def disable(self):

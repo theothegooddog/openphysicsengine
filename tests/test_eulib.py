@@ -190,6 +190,84 @@ def test_gui():
     print("  (gui widgets all behaved)")
 
 
+def test_layout_groups():
+    from eulib import Column, Row, Stack, finalui
+
+    window = finalui(size=(900, 600))
+
+    # vertical([...]) -> a Column holding the widgets, top to bottom
+    v1, v2, v3 = window.view3d(), window.view3d(), window.view3d()
+    col = window.vertical([v1, v2, v3])
+    assert isinstance(col, Column)
+    for v in (v1, v2, v3):
+        assert v.winfo_manager() == "pack"
+        assert str(v.pack_info()["in"]) == str(col)
+        assert v.pack_info()["side"] == "top"
+
+    # horizontal([...]) -> a Row, side by side, with a custom gap
+    buttons = [window.button("a"), window.button("b")]
+    row = window.horizontal(buttons, gap=2)
+    assert isinstance(row, Row)
+    for b in buttons:
+        info = b.pack_info()
+        assert str(info["in"]) == str(row)
+        assert info["side"] == "left"
+        assert int(info["padx"]) == 2
+
+    # stack([...]) -> layered widgets; first = base, tuples pick an anchor
+    base = window.view3d()
+    fps = window.label("fps: 60")
+    hud = window.stack([base, (fps, "nw")])
+    assert isinstance(hud, Stack)
+    assert hud.base is base
+    assert base.winfo_manager() == "pack"
+    assert fps.winfo_manager() == "place"
+    info = fps.place_info()
+    assert info["anchor"] == "nw"
+    assert float(info["relx"]) == 0.0 and float(info["rely"]) == 0.0
+
+    # fill=True overlays cover the whole stack
+    pause = window.label("paused")
+    hud.add(pause, fill=True)
+    assert float(pause.place_info()["relwidth"]) == 1.0
+
+    # widgets created *on* a stack become layers too
+    st = window.stack()
+    inner_base = st.view3d()
+    assert st.base is inner_base
+    corner = st.label("top right", anchor="ne")
+    assert corner.winfo_manager() == "place"
+    assert corner.place_info()["anchor"] == "ne"
+
+    # hide/show works for placed overlays
+    fps.hide()
+    assert fps.winfo_manager() == ""
+    fps.show()
+    assert fps.winfo_manager() == "place"
+
+    # bad anchors and cross-container moves fail with friendly errors
+    try:
+        st.add(window.label("x"), anchor="topleft")
+        raise AssertionError("expected ValueError for bad anchor")
+    except ValueError as err:
+        assert "anchor" in str(err)
+    other = window.column()
+    stray = other.label("stray")
+    try:
+        window.vertical([stray])
+        raise AssertionError("expected ValueError for cross-container move")
+    except ValueError as err:
+        assert "same window" in str(err)
+
+    # the moved-in views actually get screen space
+    window.update_idletasks()
+    window.update()
+    for v in (v1, v2, v3):
+        assert v.winfo_height() > 10
+
+    window.close()
+
+
 def test_gui_light_theme():
     from eulib import finalui
     window = finalui(theme="light", size=(300, 200))   # classic constructor
@@ -219,6 +297,7 @@ def main():
     if _display_available():
         print("gui tests:")
         check("gui smoke test", test_gui)
+        check("vertical/horizontal/stack", test_layout_groups)
         check("light theme", test_gui_light_theme)
     else:
         print("gui tests: skipped (no display — try xvfb-run)")

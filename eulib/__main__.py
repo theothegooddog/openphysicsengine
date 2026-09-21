@@ -19,11 +19,13 @@ def main():
 
     split = window.row(fill="both", expand=True, pad=0)
     panel = split.column(fill="y", expand=False, pad=0)
-    view = split.view3d()
+    scene = split.stack()               # 3D view with widgets floating on top
+    view = scene.view3d()               # first item = the base of the stack
+    scene.label("drag = orbit   scroll = zoom   right-drag = pan", size=9,
+                color=window.theme["subtle"], anchor="s")
+    counter = scene.label("3 shapes", size=10, anchor="nw")
 
     panel.heading("eulib")
-    panel.label("drag = orbit   scroll = zoom\nright-drag = pan", size=9,
-                color=window.theme["subtle"])
     panel.separator()
 
     log = None  # made further down; used by the callbacks below
@@ -44,10 +46,12 @@ def main():
                   random.uniform(-2.5, 2.5))
         view.add(mesh)
         view.spin(mesh, y=speed.value)
+        counter.text = f"{len(view.meshes)} shapes"
         say(f"added a {picker.value.lower()}")
 
     def clear_scene():
         view.clear()
+        counter.text = "0 shapes"
         say("cleared the scene")
 
     def toggle_wireframe(on):

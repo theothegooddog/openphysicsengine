@@ -15,7 +15,7 @@ that hold something have a .value you can read and write.
 import tkinter as tk
 from tkinter import ttk
 
-from .base import EasyWidget, font, parent_bg, take_pack
+from .base import EasyWidget, font, parent_bg, raise_tree, take_pack
 from .theme import get_theme
 from .view3d import View3D
 
@@ -23,6 +23,8 @@ from .view3d import View3D
 # ---------------------------------------------------------------- widgets
 
 class Label(tk.Label, EasyWidget):
+    _layout_defaults = {"anchor": "w"}
+
     def __init__(self, parent, text="", size=11, bold=False, color=None, **kw):
         theme = get_theme(parent)
         kw.setdefault("justify", "left")
@@ -39,6 +41,8 @@ class Label(tk.Label, EasyWidget):
 
 
 class Button(tk.Button, EasyWidget):
+    _layout_defaults = {"anchor": "w"}
+
     def __init__(self, parent, text="Button", on_click=None, color=None,
                  text_color=None, size=11, **kw):
         theme = get_theme(parent)
@@ -75,6 +79,8 @@ class Input(tk.Entry, EasyWidget):
     on_change=fn      -> fn(text) as the user types
     on_enter=fn       -> fn(text) when they press Enter
     """
+
+    _layout_defaults = {"fill": "x", "anchor": "w"}
 
     def __init__(self, parent, placeholder="", value="", on_change=None,
                  on_enter=None, width=24, password=False, **kw):
@@ -157,6 +163,8 @@ class Dropdown(ttk.Combobox, EasyWidget):
     on_select=fn      -> fn(choice) when the user picks something
     """
 
+    _layout_defaults = {"anchor": "w"}
+
     def __init__(self, parent, options=(), value=None, on_select=None,
                  width=None, **kw):
         self.on_select = on_select
@@ -203,6 +211,8 @@ class Slider(tk.Scale, EasyWidget):
     on_change=fn  -> fn(number) while dragging
     """
 
+    _layout_defaults = {"fill": "x", "anchor": "w"}
+
     def __init__(self, parent, min=0, max=100, value=None, step=None,
                  label="", on_change=None, horizontal=True, length=180, **kw):
         theme = get_theme(parent)
@@ -244,6 +254,8 @@ class Slider(tk.Scale, EasyWidget):
 class Checkbox(tk.Checkbutton, EasyWidget):
     """A tick box. checkbox.checked is True/False; on_toggle=fn gets fn(bool)."""
 
+    _layout_defaults = {"anchor": "w"}
+
     def __init__(self, parent, text="", checked=False, on_toggle=None, **kw):
         theme = get_theme(parent)
         self.on_toggle = on_toggle
@@ -273,6 +285,8 @@ class Checkbox(tk.Checkbutton, EasyWidget):
 
 class TextBox(tk.Text, EasyWidget):
     """A multi-line text area. Great as a log with readonly=True + .append()."""
+
+    _layout_defaults = {"fill": "x", "anchor": "w"}
 
     def __init__(self, parent, value="", readonly=False, height=6, width=36, **kw):
         theme = get_theme(parent)
@@ -314,9 +328,39 @@ class TextBox(tk.Text, EasyWidget):
 
 # ----------------------------------------------------- containers + factory
 
+def _detach(widget):
+    """Take a widget out of whatever layout it's currently in."""
+    manager = widget.winfo_manager()
+    if manager == "pack":
+        widget.pack_forget()
+    elif manager == "place":
+        widget.place_forget()
+    elif manager == "grid":
+        widget.grid_forget()
+
+
+def _flatten(items):
+    """add(a, b) and add([a, b]) both work."""
+    out = []
+    for item in items:
+        if isinstance(item, (list, tuple)):
+            out.extend(item)
+        else:
+            out.append(item)
+    return out
+
+
+# where each anchor sits inside a Stack, as (relx, rely)
+_ANCHOR_POS = {
+    "center": (0.5, 0.5), "n": (0.5, 0.0), "s": (0.5, 1.0),
+    "e": (1.0, 0.5), "w": (0.0, 0.5),
+    "ne": (1.0, 0.0), "nw": (0.0, 0.0), "se": (1.0, 1.0), "sw": (0.0, 1.0),
+}
+
+
 class WidgetFactory:
-    """Everything a window, row, or column can create. Each method makes the
-    widget, lays it out, and returns it.
+    """Everything a window, row, column, or stack can create. Each method
+    makes the widget, lays it out, and returns it.
 
     All of them accept layout keywords too: side, fill, expand, anchor,
     pad / padx / pady.
@@ -327,105 +371,163 @@ class WidgetFactory:
     def _content(self):
         return self
 
-    def _place(self, widget, defaults, pack):
-        parent = widget.master
+    def _place(self, widget, pack, defaults=None):
+        if defaults is None:
+            defaults = getattr(widget, "_layout_defaults", {})
         merged = dict(defaults)
         merged.update(pack)
-        side = merged.pop("side", None) or getattr(parent, "_side", "top")
+        side = merged.pop("side", None) or getattr(widget.master, "_side", "top")
         pad = merged.pop("pad", 6)
         merged.setdefault("padx", pad)
         merged.setdefault("pady", pad)
         widget.pack(side=side, **merged)
-        widget._pack_opts = dict(side=side, **merged)
+        widget._geo = ("pack", dict(side=side, **merged))
         return widget
 
     # --- text ---
 
     def label(self, text="", **opts):
         pack = take_pack(opts)
-        return self._place(Label(self._content(), text=text, **opts),
-                           {"anchor": "w"}, pack)
+        return self._place(Label(self._content(), text=text, **opts), pack)
 
     def heading(self, text="", size=17, **opts):
         """A big bold label."""
         opts.setdefault("bold", True)
         pack = take_pack(opts)
         return self._place(Label(self._content(), text=text, size=size, **opts),
-                           {"anchor": "w"}, pack)
+                           pack)
 
     # --- controls ---
 
     def button(self, text="Button", on_click=None, **opts):
         pack = take_pack(opts)
-        return self._place(Button(self._content(), text=text, on_click=on_click,
-                                  **opts), {"anchor": "w"}, pack)
+        return self._place(Button(self._content(), text=text,
+                                  on_click=on_click, **opts), pack)
 
     def input(self, placeholder="", **opts):
         pack = take_pack(opts)
         return self._place(Input(self._content(), placeholder=placeholder,
-                                 **opts), {"fill": "x", "anchor": "w"}, pack)
+                                 **opts), pack)
 
     entry = input  # tkinter folks expect .entry()
 
     def dropdown(self, options=(), on_select=None, **opts):
         pack = take_pack(opts)
         return self._place(Dropdown(self._content(), options=options,
-                                    on_select=on_select, **opts),
-                           {"anchor": "w"}, pack)
+                                    on_select=on_select, **opts), pack)
 
     def slider(self, min=0, max=100, **opts):
         pack = take_pack(opts)
         return self._place(Slider(self._content(), min=min, max=max, **opts),
-                           {"fill": "x", "anchor": "w"}, pack)
+                           pack)
 
     def checkbox(self, text="", **opts):
         pack = take_pack(opts)
-        return self._place(Checkbox(self._content(), text=text, **opts),
-                           {"anchor": "w"}, pack)
+        return self._place(Checkbox(self._content(), text=text, **opts), pack)
 
     def textbox(self, value="", **opts):
         pack = take_pack(opts)
-        return self._place(TextBox(self._content(), value=value, **opts),
-                           {"fill": "x", "anchor": "w"}, pack)
+        return self._place(TextBox(self._content(), value=value, **opts), pack)
 
     # --- layout ---
+
+    def add(self, *items, gap=6):
+        """Move widgets you already made into this container.
+
+        The widgets must have been created from this same window (or from
+        one of its rows/columns on the same branch) — which is where they
+        come from anyway.
+        """
+        target = self._content()
+        side = getattr(target, "_side", "top")
+        for widget in _flatten(items):
+            _detach(widget)
+            opts = dict(getattr(widget, "_layout_defaults", {}))
+            opts.setdefault("padx", gap)
+            opts.setdefault("pady", gap)
+            try:
+                widget.pack(in_=target, side=side, **opts)
+            except tk.TclError as err:
+                raise ValueError(
+                    f"can't move {widget.__class__.__name__} here — widgets "
+                    "can only be grouped into containers made from the same "
+                    f"window/row/column they were created on ({err})"
+                ) from err
+            raise_tree(widget)
+            widget._geo = ("pack", dict(in_=target, side=side, **opts))
+        return self
 
     def row(self, **opts):
         """A container whose children line up left-to-right."""
         pack = take_pack(opts)
-        return self._place(Row(self._content(), **opts), {"fill": "x"}, pack)
+        return self._place(Row(self._content(), **opts), pack)
 
     def column(self, **opts):
         """A container whose children stack top-to-bottom."""
         pack = take_pack(opts)
-        return self._place(Column(self._content(), **opts),
-                           {"fill": "both", "expand": True}, pack)
+        return self._place(Column(self._content(), **opts), pack)
+
+    def vertical(self, items=None, gap=6, **opts):
+        """A column of widgets you already made, top to bottom:
+
+            window.vertical([view_a, view_b, view_c])
+        """
+        pack = take_pack(opts)
+        column = self._place(Column(self._content(), **opts), pack)
+        if items is not None:
+            column.add(items, gap=gap)
+        return column
+
+    def horizontal(self, items=None, gap=6, **opts):
+        """A row of widgets you already made, left to right:
+
+            window.horizontal([view_a, view_b])
+        """
+        pack = take_pack(opts)
+        row = self._place(Row(self._content(), **opts), pack,
+                          {"fill": "both", "expand": True})
+        if items is not None:
+            row.add(items, gap=gap)
+        return row
+
+    def stack(self, items=None, **opts):
+        """Widgets on top of each other in the same place. The first item is
+        the base and fills the stack; the rest float over it (centered, or
+        give a (widget, anchor) pair):
+
+            window.stack([view, (fps_label, "nw")])
+        """
+        pack = take_pack(opts)
+        the_stack = self._place(Stack(self._content(), **opts), pack)
+        if items is not None:
+            the_stack.add(items)
+        return the_stack
 
     def separator(self, **opts):
         pack = take_pack(opts)
         horizontal = getattr(self._content(), "_side", "top") in ("top", "bottom")
         sep = ttk.Separator(self._content(),
                             orient="horizontal" if horizontal else "vertical")
-        return self._place(sep, {"fill": "x" if horizontal else "y"}, pack)
+        return self._place(sep, pack, {"fill": "x" if horizontal else "y"})
 
     def spacer(self, size=10, **opts):
         pack = take_pack(opts)
         frame = tk.Frame(self._content(), width=size, height=size,
                          bg=parent_bg(self._content()))
-        return self._place(frame, {"pad": 0}, pack)
+        return self._place(frame, pack, {"pad": 0})
 
     # --- 3d ---
 
     def view3d(self, **opts):
         """A 3D viewport (see View3D). Fills the space it's given."""
         pack = take_pack(opts)
-        return self._place(View3D(self._content(), **opts),
-                           {"fill": "both", "expand": True}, pack)
+        return self._place(View3D(self._content(), **opts), pack)
 
 
 class Row(tk.Frame, WidgetFactory, EasyWidget):
     """Children added to a Row go side by side."""
     _side = "left"
+    _layout_defaults = {"fill": "x"}
 
     def __init__(self, parent, background=None, **kw):
         super().__init__(parent, bg=background or parent_bg(parent), **kw)
@@ -434,6 +536,87 @@ class Row(tk.Frame, WidgetFactory, EasyWidget):
 class Column(tk.Frame, WidgetFactory, EasyWidget):
     """Children added to a Column stack downward."""
     _side = "top"
+    _layout_defaults = {"fill": "both", "expand": True}
 
     def __init__(self, parent, background=None, **kw):
         super().__init__(parent, bg=background or parent_bg(parent), **kw)
+
+
+class Stack(tk.Frame, WidgetFactory, EasyWidget):
+    """Widgets layered in the same place. The first widget is the base and
+    fills the whole stack (it also decides the stack's size); every later
+    widget floats on top of it.
+
+        hud = window.stack([view, (label, "nw")])
+        hud.add(button, anchor="se")            # or with an offset:
+        hud.add(minimap, anchor="ne", x=-4, y=4)
+
+    Anchors: center (default), n, s, e, w, ne, nw, se, sw.
+    Edge anchors get a small margin built in; x / y nudge from there.
+    """
+
+    _layout_defaults = {"fill": "both", "expand": True}
+
+    def __init__(self, parent, background=None, **kw):
+        super().__init__(parent, bg=background or parent_bg(parent), **kw)
+        self.base = None
+
+    @staticmethod
+    def _layers(items):
+        # flatten lists only — tuples stay whole, they mean (widget, anchor)
+        out = []
+        for item in items:
+            if isinstance(item, list):
+                out.extend(item)
+            else:
+                out.append(item)
+        return out
+
+    def add(self, *items, anchor="center", x=0, y=0, fill=False):
+        """Add widgets to the stack (first ever added becomes the base).
+
+        anchor says where an overlay sits; fill=True makes it cover the
+        whole stack (e.g. a pause screen).
+        """
+        for item in self._layers(items):
+            widget, a = item if isinstance(item, tuple) else (item, anchor)
+            if a not in _ANCHOR_POS:
+                raise ValueError(f"unknown anchor {a!r} — pick one of "
+                                 f"{', '.join(_ANCHOR_POS)}")
+            _detach(widget)
+            try:
+                if self.base is None:
+                    self.base = widget
+                    opts = dict(in_=self, fill="both", expand=True)
+                    widget.pack(**opts)
+                    widget._geo = ("pack", opts)
+                elif fill:
+                    opts = dict(in_=self, relx=0, rely=0,
+                                relwidth=1, relheight=1)
+                    widget.place(**opts)
+                    widget._geo = ("place", opts)
+                else:
+                    relx, rely = _ANCHOR_POS[a]
+                    if a == "center":
+                        dx = dy = 0
+                    else:
+                        dx = 10 if "w" in a else (-10 if "e" in a else 0)
+                        dy = 10 if "n" in a else (-10 if "s" in a else 0)
+                    opts = dict(in_=self, relx=relx, rely=rely,
+                                x=x + dx, y=y + dy, anchor=a)
+                    widget.place(**opts)
+                    widget._geo = ("place", opts)
+            except tk.TclError as err:
+                raise ValueError(
+                    f"can't stack {widget.__class__.__name__} here — widgets "
+                    "can only be grouped into containers made from the same "
+                    f"window/row/column they were created on ({err})"
+                ) from err
+            raise_tree(widget)
+        return self
+
+    def _place(self, widget, pack, defaults=None):
+        # widgets created *on* the stack (stack.label(...)) become layers:
+        # the first is the base, later ones float at their anchor
+        self.add(widget, anchor=pack.get("anchor", "center"))
+        return widget

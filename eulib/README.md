@@ -81,16 +81,40 @@ Every widget also has `.hide()` / `.show()` / `.disable()` / `.enable()`.
 
 ### Layout
 
-Widgets stack top-to-bottom by default. For anything fancier, `row()` and `column()` are containers with the exact same methods:
+Widgets stack top-to-bottom by default. For structure you have two styles that mix freely:
+
+**Containers you fill afterwards** — `row()` and `column()` have the exact same methods as the window:
 
 ```python
 split = window.row(fill="both", expand=True)
 sidebar = split.column(fill="y", expand=False)
-main    = split.column()
-
 sidebar.button("I'm in the sidebar")
-main.view3d()
+split.view3d()
 ```
+
+**Group widgets you already made** — `vertical()`, `horizontal()`, and `stack()`:
+
+```python
+window.vertical([view_a, view_b, view_c])     # top to bottom  → a Column
+window.horizontal([view_a, view_b], gap=10)   # side by side   → a Row
+
+# stack = several widgets in the SAME place, layered. The first item is the
+# base and sets the size; the rest float on top (centered, unless you give
+# a (widget, anchor) pair)
+window.stack([view, (fps_label, "nw"), (hint_label, "s")])
+```
+
+Stacks are great for HUDs. You can also build them up gradually — widgets created *on* a stack become layers, and `stack.add()` gives you full control:
+
+```python
+hud = window.stack()
+view = hud.view3d()                     # first = the base
+hud.label("score: 0", anchor="ne")      # floats top-right
+hud.add(pause_menu, fill=True)          # covers the whole stack
+hud.add(minimap, anchor="se", x=-4)     # anchor + pixel nudge
+```
+
+Overlay anchors: `center` (default), `n`, `s`, `e`, `w`, `ne`, `nw`, `se`, `sw` — edge anchors keep a small margin automatically. Every container (rows and columns too) has `.add(widgets, gap=6)` for moving widgets in later. One rule: group widgets into containers made from the same window (or the same row/column) they were created on — which is where they come from anyway.
 
 Any widget call also accepts layout keywords when you need them: `side`, `fill`, `expand`, `anchor`, `pad` / `padx` / `pady` (same meaning as tkinter's `pack`).
 

@@ -211,8 +211,12 @@ class View3D(tk.Canvas, EasyWidget):
     the mouse: left-drag orbits, scroll zooms, right- or shift-drag pans.
     """
 
-    def __init__(self, parent, width=640, height=420, background=None,
+    _layout_defaults = {"fill": "both", "expand": True}
+
+    def __init__(self, parent, width=220, height=160, background=None,
                  grid=True, axes=True, controls=True, fov=60, **kw):
+        # width/height are just the *minimum* — the view normally expands
+        # to fill whatever space its container gives it
         theme = get_theme(parent)
         self._theme = theme
         super().__init__(parent, width=width, height=height,
